@@ -39,10 +39,8 @@ class AppnexusReportService extends Actor with Logging {
 
   implicit lazy val jsonFormats = org.json4s.DefaultFormats
   implicit val system = context.system
-  system.dispatcher
 
-  implicit val ec = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(100))
-
+  implicit val ec = system.dispatchers.lookup("appnexus-fetch-dispatcher")
   implicit val timeout: Timeout = Timeout(30 minutes)
 
   def receive = {
@@ -59,8 +57,13 @@ class AppnexusReportService extends Actor with Logging {
   def fetchAppnexusCampaign(searchAgencyTerm: String, startElements: Int, numberOfElements: Int): Future[List[AppnexusCampaign]] = {
     val campaignsPromise = Promise[List[AppnexusCampaign]]()
     Future {
-      val campaignHttpResponse = getCampaigns(searchAgencyTerm, startElements, numberOfElements)
-      campaignsPromise.success(JsonUtils.parseCampaigns(campaignHttpResponse.entity.asString))
+      try {
+        val campaignHttpResponse = getCampaigns(searchAgencyTerm, startElements, numberOfElements)
+        campaignsPromise.success(JsonUtils.parseCampaigns(campaignHttpResponse.entity.asString))
+      } catch {
+        case error: Exception => log.error(s"Error when fetching Appnexus campaign data for Agency $searchAgencyTerm ", error)
+          throw error
+      }
     }
     campaignsPromise.future
   }
@@ -68,8 +71,13 @@ class AppnexusReportService extends Actor with Logging {
   def fetchAppnexusCampaignCount(searchAgencyTerm: String): Future[Int] = {
     val campaignsPromise = Promise[Int]()
     Future {
-      val campaignHttpResponse = getCampaigns(searchAgencyTerm, 0, 1)
-      campaignsPromise.success(JsonUtils.parseCampaignCount(campaignHttpResponse.entity.asString).getOrElse(0))
+      try {
+        val campaignHttpResponse = getCampaigns(searchAgencyTerm, 0, 1)
+        campaignsPromise.success(JsonUtils.parseCampaignCount(campaignHttpResponse.entity.asString).getOrElse(0))
+      } catch {
+        case error: Exception => log.error(s"Error when fetching Appnexus campaign count for Agency $searchAgencyTerm ", error)
+          throw error
+      }
     }
     campaignsPromise.future
   }

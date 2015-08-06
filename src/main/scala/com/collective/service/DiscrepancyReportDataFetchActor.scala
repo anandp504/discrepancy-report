@@ -23,26 +23,18 @@ class DiscrepancyReportDataFetchActor extends Actor with Logging {
   implicit val timeout = Timeout(50.minute)
 
   def receive = {
-    case "FETCH_REPORT_DATA" => {
-      val campaigns = generateDiscrepancyReport()
-      sender ! campaigns
+    case "FETCH_XFP_REPORT_DATA" => {
+      val campaigns = fetchXfpData()
     }
-  }
-
-  def generateDiscrepancyReport() = {
-
-    val dataFetchComplete = for {
-      appnexusFetchComplete <- fetchAppnexusData()
-      _ = log.info("Started Appnexus Campaign Data Fetch...")
-      xfpFetchComplete <- fetchXfpData()
-      _ = log.info("Started XFP Lineitem Data Fetch...")
-    } yield "done"
+    case "FETCH_APPNEXUS_REPORT_DATA" => {
+      val campaigns = fetchAppnexusData()
+    }
   }
 
   def fetchAppnexusData() = Future {
 
     implicit lazy val jsonFormats = org.json4s.DefaultFormats
-    val appnexusReportService = system.actorOf(Props[AppnexusReportService])
+    val appnexusReportService = system.actorOf(Props[AppnexusReportService].withDispatcher("appnexus-fetch-dispatcher"), "appnexus-actor")
     val appnexusFileWriterActor = system.actorOf(Props[AppnexusFileWriterActor])
     val agenciesPrefix = ServicesConfig.appnexusConfig("reach.agencies.prefix").split(",")
     val processingCount = ServicesConfig.appnexusConfig("campaign.processing.count").toInt
@@ -69,7 +61,7 @@ class DiscrepancyReportDataFetchActor extends Actor with Logging {
   }
 
   def fetchXfpData() = Future {
-    val googleDfpService = system.actorOf(Props[GoogleXFPService])
+    val googleDfpService = system.actorOf(Props[GoogleXFPService].withDispatcher("appnexus-fetch-dispatcher"), "xfp-actor")
     val appnexusFileWriterActor = system.actorOf(Props[AppnexusFileWriterActor])
 
     val agenciesPrefix = ServicesConfig.appnexusConfig("reach.agencies.prefix").split(",")

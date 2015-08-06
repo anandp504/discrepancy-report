@@ -41,11 +41,20 @@ trait CampaignFetcherService extends HttpService with Logging {
         val appnexusCampaignsFile = ServicesConfig.appnexusConfig("appnexus.output.file.path")
         getFromFile(appnexusCampaignsFile)
       } ~
-      path("fetchdata") {
+      path("fetch-xfp-data") {
         get {
-          log.info("calling discrepancy report data fetch path....")
+          log.info("calling xfp report data fetch path....")
           complete {
-            reportDataFetchActor ? "FETCH_REPORT_DATA"
+            reportDataFetchActor ? "FETCH_XFP_REPORT_DATA"
+            "Discrepancy report data fetch initiated"
+          }
+        }
+      } ~
+      path("fetch-appnexus-data") {
+        get {
+          log.info("calling appnexus report data fetch path....")
+          complete {
+            reportDataFetchActor ? "FETCH_APPNEXUS_REPORT_DATA"
             "Discrepancy report data fetch initiated"
           }
         }

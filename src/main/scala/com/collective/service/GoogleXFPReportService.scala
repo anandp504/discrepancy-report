@@ -24,18 +24,18 @@ object GoogleXFPService {
 
   case class XFPLineItems(agencyNamePrefix: String)
 
+  /*
   def dfpSession = {
     DfpSessionFactory.getDfpSession()
   }
+  */
 
 }
 
 class GoogleXFPService extends Actor with Logging {
 
   implicit val system = context.system
-  system.dispatcher
-
-  implicit val ec = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(50))
+  implicit val ec = system.dispatchers.lookup("xfp-fetch-dispatcher")
   implicit val timeout: Timeout = Timeout(30 minutes)
 
   def receive = {
@@ -55,17 +55,16 @@ class GoogleXFPService extends Actor with Logging {
   }
 
   def getLineItems(agencyNamePrefix: String): List[DFPCampaign] = {
-    //log.info("Fetching Google XFP LineItems...")
+    log.debug(s"Fetching Google XFP LineItems for Agency $agencyNamePrefix ...")
     val dfpServices: DfpServices = new DfpServices()
     val googleXfpLineItems = ListBuffer[DFPCampaign]()
     var resultSetSize = 0
-    //val dfpSession = DfpSessionFactory.getDfpSession()
+    val dfpSession = DfpSessionFactory.getDfpSession()
 
     try {
-      val lineItemService: LineItemServiceInterface = dfpServices.get(GoogleXFPService.dfpSession, classOf[LineItemServiceInterface])
+      val lineItemService: LineItemServiceInterface = dfpServices.get(dfpSession, classOf[LineItemServiceInterface])
       val lineItemStmtBuilder: StatementBuilder = new StatementBuilder()
-      lineItemStmtBuilder.where( s"""endDateTime >= :endDate AND (name like '$agencyNamePrefix%App%' OR name like '$agencyNamePrefix%APP%' OR name like '$agencyNamePrefix%^MOB%' OR name like '$agencyNamePrefix%^TAB%') AND status = 'DELIVERING'""").limit(1500)
-      //lineItemStmtBuilder.where( s"""endDateTime >= :endDate AND (name like 'RE AM%App%' OR name like 'RE AM%APP%') AND status = 'DELIVERING'""").limit(1500)
+      lineItemStmtBuilder.where( s"""endDateTime >= :endDate AND (name like '$agencyNamePrefix%App%' OR name like '$agencyNamePrefix%APP%' OR name like '$agencyNamePrefix%^MOB%' OR name like '$agencyNamePrefix%^TAB%') AND status = 'DELIVERING'""").limit(StatementBuilder.SUGGESTED_PAGE_LIMIT)
         .withBindVariableValue("endDate", DateTimes.toDateTime(Instant.now().minus(Duration.standardDays(1L)), "America/New_York"))
 
       do {
@@ -73,18 +72,16 @@ class GoogleXFPService extends Actor with Logging {
         lineItemPage match {
           case Some(lineItemPage) => {
             resultSetSize = lineItemPage.getTotalResultSetSize
-            //log.info("Lineitem size = " + resultSetSize)
             if (resultSetSize > 0) {
               googleXfpLineItems ++= getLineItemDetails(lineItemPage.getResults)
             }
           }
           case None => log.debug("LineItem ResultSet empty")
         }
-        lineItemStmtBuilder.increaseOffsetBy(1500)
+        lineItemStmtBuilder.increaseOffsetBy(StatementBuilder.SUGGESTED_PAGE_LIMIT)
       } while (lineItemStmtBuilder.getOffset < resultSetSize)
-      //log.info("result set size = " + googleXfpLineItems.toList.size)
     } catch {
-      case ex: Exception => log.error("Exception when fetch XFP data for agency " + agencyNamePrefix, ex)
+      case ex: Exception => log.error(s"Exception when fetch XFP data for agency $agencyNamePrefix", ex)
         throw ex;
     }
     googleXfpLineItems.toList
@@ -95,8 +92,9 @@ class GoogleXFPService extends Actor with Logging {
     for(lineItem <- lineItems) {
       val stats: Stats = lineItem.getStats
       if(stats != null) {
-        //log.info(DFPCampaign(lineItem.getId, lineItem.getName, stats.getImpressionsDelivered).toString)
-        xfpLineItems += DFPCampaign(lineItem.getId, lineItem.getName, stats.getImpressionsDelivered, lineItem.getContractedUnitsBought)
+        val dfpCampaign = DFPCampaign(lineItem.getId, lineItem.getName, stats.getImpressionsDelivered, lineItem.getContractedUnitsBought)
+        log.debug(dfpCampaign.toString)
+        xfpLineItems += dfpCampaign
       }
     }
     xfpLineItems.toList
