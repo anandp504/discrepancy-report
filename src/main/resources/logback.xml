@@ -1,0 +1,22 @@
+<configuration>
+    <appender name="StdoutBlocking" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <!-- http://logback.qos.ch/manual/layouts.html#conversionWord -->
+            <pattern>[%level] [%date{ISO8601,UTC}] [%logger] %message %ex{full}\n</pattern>
+        </encoder>
+    </appender>
+
+   <logger name="com.google.api.ads.dfp.lib.client.DfpServiceClient.soapXmlLogger" level="ERROR"/>
+   <logger name="com.google.api.ads.dfp.lib.client.DfpServiceClient.requestInfoLogger" level="ERROR"/>
+
+    <!--
+    <appender name="StdOut" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="StdoutBlocking"/>
+        <queueSize>10240</queueSize>
+    </appender>
+    -->
+
+    <root level="INFO">
+        <appender-ref ref="StdoutBlocking"/>
+    </root>
+</configuration>

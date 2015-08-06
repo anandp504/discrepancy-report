@@ -1,0 +1,23 @@
+# Scala
+*.class
+*.log
+bin
+
+# IDEA
+*.iml
+*.ipr
+*.iws
+.idea_modules/
+project/.idea
+
+# Sbt specific
+target/
+
+# OS X
+*.DS_Store
+
+.cache
+.settings
+.project
+
+src/main/resources/key.p12
