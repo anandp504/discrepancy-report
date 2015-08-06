@@ -9,6 +9,7 @@ bin
 *.iws
 .idea_modules/
 project/.idea
+.idea
 
 # Sbt specific
 target/
