@@ -14,9 +14,9 @@ case class AppnexusCampaign(campaignId: Long, campaignName: String, deliveredImp
   }
 }
 
-case class DFPCampaign(lineItemId: Long, lineItemName: String, impressionsDelivered: Long, bookedImps: Long) extends Ordered[DFPCampaign] {
+case class DFPCampaign(lineItemId: Long, lineItemName: String, impressionsDelivered: Long, bookedImps: Long, startDate: String, endDate: String) extends Ordered[DFPCampaign] {
   override def toString: String = {
-    s"$lineItemName~$lineItemId~$impressionsDelivered~$bookedImps"
+    s"$lineItemName~$lineItemId~$impressionsDelivered~$bookedImps~$startDate~$endDate"
   }
 
   override def compare(that: DFPCampaign): Int = {

@@ -1,5 +1,6 @@
 package com.collective.service
 
+import java.text.SimpleDateFormat
 import java.util.concurrent.Executors
 import akka.actor.Actor
 import akka.pattern.pipe
@@ -64,7 +65,7 @@ class GoogleXFPService extends Actor with Logging {
     try {
       val lineItemService: LineItemServiceInterface = dfpServices.get(dfpSession, classOf[LineItemServiceInterface])
       val lineItemStmtBuilder: StatementBuilder = new StatementBuilder()
-      lineItemStmtBuilder.where( s"""endDateTime >= :endDate AND (name like '$agencyNamePrefix%App%' OR name like '$agencyNamePrefix%APP%' OR name like '$agencyNamePrefix%^MOB%' OR name like '$agencyNamePrefix%^TAB%') AND status = 'DELIVERING'""").limit(StatementBuilder.SUGGESTED_PAGE_LIMIT)
+      lineItemStmtBuilder.where( s"""endDateTime >= :endDate AND (name like '$agencyNamePrefix%App%' OR name like '$agencyNamePrefix%APP%' OR name like '$agencyNamePrefix%^MOB%' OR name like '$agencyNamePrefix%^TAB%') AND status IN ('DELIVERING', 'READY')""").limit(StatementBuilder.SUGGESTED_PAGE_LIMIT)
         .withBindVariableValue("endDate", DateTimes.toDateTime(Instant.now().minus(Duration.standardDays(1L)), "America/New_York"))
 
       do {
@@ -89,10 +90,13 @@ class GoogleXFPService extends Actor with Logging {
 
   def getLineItemDetails(lineItems: Array[LineItem]): List[DFPCampaign] = {
     val xfpLineItems = ListBuffer[DFPCampaign]()
+    val sdf = new SimpleDateFormat("yyyy-MM-dd")
     for(lineItem <- lineItems) {
       val stats: Stats = lineItem.getStats
       if(stats != null) {
-        val dfpCampaign = DFPCampaign(lineItem.getId, lineItem.getName, stats.getImpressionsDelivered, lineItem.getContractedUnitsBought)
+        val startDate = new java.util.Date(DateTimes.toCalendar(lineItem.getStartDateTime).getTimeInMillis)
+        val endDate = new java.util.Date(DateTimes.toCalendar(lineItem.getEndDateTime).getTimeInMillis)
+        val dfpCampaign = DFPCampaign(lineItem.getId, lineItem.getName, stats.getImpressionsDelivered, lineItem.getContractedUnitsBought, sdf.format(startDate), sdf.format(endDate))
         log.debug(dfpCampaign.toString)
         xfpLineItems += dfpCampaign
       }

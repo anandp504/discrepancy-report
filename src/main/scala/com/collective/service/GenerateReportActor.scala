@@ -44,7 +44,7 @@ class GenerateReportActor extends Actor with Logging{
         val sheetData: ListBuffer[Row] = ListBuffer[Row]()
         val headerStyle = CellStyle(font = Font(bold = true))
         //writer.println(s"XFP LineItemName,Appnexus Campaign,XFP Imps,XFP Booked Imps,Appnexus Imps,Appnexus Booked Imps")
-        sheetData += Row(style = headerStyle).withCellValues("XFP LineItemName", "Appnexus Campaign", "XFP Imps", "XFP Booked Imps", "Appnexus Imps", "Appnexus Booked Imps")
+        sheetData += Row(style = headerStyle).withCellValues("XFP LineItemName", "XFP Start Date", "XFP End Date", "Appnexus Campaign", "XFP Imps", "XFP Booked Imps", "Appnexus Imps", "Appnexus Booked Imps", "Discrepancy %", "Discrepancy Number", "TB updated on Exchange")
         try {
           result._1 foreach {
             case (xfpCamp, xfpVal) => {
@@ -53,8 +53,18 @@ class GenerateReportActor extends Actor with Logging{
                   breakable {
                     if (appnxsCamp.contains(xfpCamp)) {
                       if (xfpVal.impressionsDelivered != appnxsVal.deliveredImps) {
-                        //writer.println(s"${xfpVal.lineItemName},${appnxsVal.campaignName},${xfpVal.impressionsDelivered},${xfpVal.bookedImps},${appnxsVal.deliveredImps},${appnxsVal.lifeTimeBudgetImps}")
-                        sheetData += Row().withCellValues(xfpVal.lineItemName,appnxsVal.campaignName,xfpVal.impressionsDelivered,xfpVal.bookedImps,appnxsVal.deliveredImps,appnxsVal.lifeTimeBudgetImps)
+                        val discrepancyPerc: Double = (appnxsVal.deliveredImps - xfpVal.impressionsDelivered) * 1.0/appnxsVal.deliveredImps
+                        var discrepancyNumber:Option[Double] = None
+                        var toBeUpdatedOnExchange: Option[Double] = None
+                        val lineItemName = xfpVal.lineItemName
+                        if(!lineItemName.contains("^Mob") && !lineItemName.contains("^Tab") && !lineItemName.contains("^MOB") && !lineItemName.contains("^TAB")) {
+                          discrepancyNumber = Some((xfpVal.bookedImps - xfpVal.impressionsDelivered) * (1 + discrepancyPerc))
+                          toBeUpdatedOnExchange = Some(discrepancyNumber.get + appnxsVal.deliveredImps)
+                        } else {
+                          discrepancyNumber = Some(discrepancyPerc * xfpVal.bookedImps)
+                          toBeUpdatedOnExchange =Some(discrepancyNumber.get + xfpVal.bookedImps)
+                        }
+                        sheetData += Row().withCellValues(xfpVal.lineItemName,xfpVal.startDate, xfpVal.endDate,appnxsVal.campaignName,xfpVal.impressionsDelivered,xfpVal.bookedImps,appnxsVal.deliveredImps,appnxsVal.lifeTimeBudgetImps, roundAt(2)(discrepancyPerc*100.0), discrepancyNumber.get.round, toBeUpdatedOnExchange.get.round)
                       }
                       break()
                     }
@@ -73,6 +83,8 @@ class GenerateReportActor extends Actor with Logging{
     }
 
   }
+
+  def roundAt(p: Int)(n: Double): Double = { val s = math pow (10, p); (math round n * s) / s }
 
   def readAppnexusData(): Future[TreeMap[String, AppnexusCampaign]] = {
     val appnexusDataPromise = Promise[TreeMap[String, AppnexusCampaign]]()
@@ -111,7 +123,7 @@ class GenerateReportActor extends Actor with Logging{
         while (line != None) {
           //log.info("line = " + line)
           val xfpData = line.getOrElse("").split("~")
-          xfpMap += (xfpData(0) -> DFPCampaign(xfpData(1).toLong, xfpData(0), xfpData(2).toLong, xfpData(3).toLong))
+          xfpMap += (xfpData(0) -> DFPCampaign(xfpData(1).toLong, xfpData(0), xfpData(2).toLong, xfpData(3).toLong, xfpData(4), xfpData(5)))
           line = Option(xfpReader.readLine())
         }
         xfpDataPromise.success(TreeMap(xfpMap.toArray: _*))
