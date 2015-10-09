@@ -43,7 +43,7 @@ object JsonUtils extends Logging {
     }
   }
 
-  def parseCampaigns(response: String): List[AppnexusCampaign] = {
+  def parseCampaigns(agencyPrefix: String, response: String): List[AppnexusCampaign] = {
     try {
       val parsedResponse = parse(response)
       for {
@@ -52,6 +52,7 @@ object JsonUtils extends Logging {
         JField("start_date", JString(startDate)) <- campaigns
         JField("end_date", JString(endDate)) <- campaigns
         JField("lifetime_budget_imps", JInt(lifetimeBudgetImps)) <- campaigns
+        JField("lifetime_pacing", JBool(lifetimePacing)) <- campaigns
         JField("daily_budget_imps", JInt(dailyBudgetImps)) <- campaigns
         JField("name", JString(name)) <- campaigns
         JField("stats", JObject(stats)) <- campaigns
@@ -59,7 +60,7 @@ object JsonUtils extends Logging {
           JField("imps", JInt(imps)) <- stats
         } yield imps
         if stats != null
-      } yield AppnexusCampaign(campaignId.toLong, name, imps(0).toLong, lifetimeBudgetImps.toLong, dailyBudgetImps.toLong)
+      } yield AppnexusCampaign(agencyPrefix, campaignId.toLong, name, imps(0).toLong, lifetimeBudgetImps.toLong, dailyBudgetImps.toLong, lifetimePacing)
     } catch {
       case ex: JsonMappingException => {
         log.error("Parsing campaign data failed: ", ex)

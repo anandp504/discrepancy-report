@@ -25,30 +25,37 @@ object HttpUtils extends Logging {
   implicit val system = ActorSystem("HttpClient")
   system.dispatcher
 
-  implicit val timeout: Timeout = Timeout(800.second)
+  implicit val timeout: Timeout = Timeout(1200.second)
   implicit val ec = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(50))
 
   val pipeline: Future[SendReceive] = {
       log.info("appnexushost = " + appnexusHost)
       for {
         Http.HostConnectorInfo(connector, _) <- IO(Http) ? Http.HostConnectorSetup(appnexusHost)
-      } yield sendReceive(throttleFrequencyWithTransport(75 perMinute, connector))
+      } yield sendReceive(throttleFrequencyWithTransport(55 perMinute, connector))
   }
 
-  def post(requestRelativeUri: String, jsonPayLoad: String) : HttpResponse = {
+  def post(requestRelativeUri: String, jsonPayLoad: String) : Future[HttpResponse] = {
 
     val uri: Uri = Uri(requestRelativeUri)
     val request: HttpRequest = Post(uri, jsonPayLoad)
-    Await.result(pipeline.flatMap { client => client.apply(request)}, 800 seconds)
-
+    //Await.result(pipeline.flatMap { client => client.apply(request)}, 800 seconds)
+    pipeline.flatMap { client => client.apply(request)}
   }
 
-  def get(requestRelativeUri: String, queryParams: Map[String, String] = Map(), httpHeaders: List[HttpHeader] = Nil) : HttpResponse = {
+  def put(requestRelativeUri: String, queryParams: Map[String, String] = Map(), httpHeaders: List[HttpHeader] = Nil, jsonPayLoad: String) : Future[HttpResponse] = {
+
+    val uri: Uri = Uri(requestRelativeUri).withQuery(queryParams)
+    val request: HttpRequest = Put(uri, jsonPayLoad).withHeaders(httpHeaders)
+    pipeline.flatMap { client => client.apply(request)}
+  }
+
+  def get(requestRelativeUri: String, queryParams: Map[String, String] = Map(), httpHeaders: List[HttpHeader] = Nil) : Future[HttpResponse] = {
 
     val uri: Uri = Uri(requestRelativeUri).withQuery(queryParams)
     val request: HttpRequest = Get(uri).withHeaders(httpHeaders)
-    Await.result(pipeline.flatMap { client => client.apply(request)}, 800 seconds)
-
+    //Await.result(pipeline.flatMap { client => client.apply(request)}, 800 seconds)
+    pipeline.flatMap { client => client.apply(request)}
   }
 
 }

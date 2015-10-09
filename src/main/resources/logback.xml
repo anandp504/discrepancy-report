@@ -6,6 +6,19 @@
         </encoder>
     </appender>
 
+    <appender name="LOG_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>/Users/anand/Documents/CDESK/discrepancy-report/logs/discrepancy-report.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <!-- Daily rollover with compression -->
+            <fileNamePattern>discrepancy-report-%d{yyyy-MM-dd}.log</fileNamePattern>
+            <!-- keep 30 days worth of history -->
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>[%level] [%date{ISO8601,UTC}] [%logger] %message %ex{full}\n</pattern>
+        </encoder>
+    </appender>
+
    <logger name="com.google.api.ads.dfp.lib.client.DfpServiceClient.soapXmlLogger" level="ERROR"/>
    <logger name="com.google.api.ads.dfp.lib.client.DfpServiceClient.requestInfoLogger" level="ERROR"/>
 
@@ -18,5 +31,6 @@
 
     <root level="INFO">
         <appender-ref ref="StdoutBlocking"/>
+        <appender-ref ref="LOG_FILE" />
     </root>
 </configuration>

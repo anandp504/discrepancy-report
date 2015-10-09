@@ -97,7 +97,7 @@ class GoogleXFPService extends Actor with Logging {
         val startDate = new java.util.Date(DateTimes.toCalendar(lineItem.getStartDateTime).getTimeInMillis)
         val endDate = new java.util.Date(DateTimes.toCalendar(lineItem.getEndDateTime).getTimeInMillis)
         val dfpCampaign = DFPCampaign(lineItem.getId, lineItem.getName, stats.getImpressionsDelivered, lineItem.getContractedUnitsBought, sdf.format(startDate), sdf.format(endDate))
-        log.debug(dfpCampaign.toString)
+        //log.debug(dfpCampaign.toString)
         xfpLineItems += dfpCampaign
       }
     }

@@ -1,14 +1,17 @@
 package com.collective.service
 
 import java.io._
+import java.text.SimpleDateFormat
+import java.util.Calendar
 
 import akka.actor.Actor
 import com.collective.models.{DFPCampaign, AppnexusCampaign}
 import com.collective.utils.{ServicesConfig, Logging}
-import com.norbitltd.spoiwo.model.CellStyle
-import com.norbitltd.spoiwo.model.Font
-import com.norbitltd.spoiwo.model.Row
-import com.norbitltd.spoiwo.model.Row
+import org.joda.time.format.DateTimeFormat
+import org.joda.time.{Days, DateTimeZone, DateTime}
+
+//import com.norbitltd.spoiwo.model.CellStyle
+//import com.norbitltd.spoiwo.model.Font
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -39,12 +42,12 @@ class GenerateReportActor extends Actor with Logging{
     results.map {
       result =>
         new File(ServicesConfig.appnexusConfig("discrepancy.report.output.file.path")).delete
-        //val fileWriter: FileWriter = new FileWriter(ServicesConfig.appnexusConfig("discrepancy.report.output.file.path"), true)
-        //val writer: PrintWriter = new PrintWriter(fileWriter, true)
         val sheetData: ListBuffer[Row] = ListBuffer[Row]()
         val headerStyle = CellStyle(font = Font(bold = true))
-        //writer.println(s"XFP LineItemName,Appnexus Campaign,XFP Imps,XFP Booked Imps,Appnexus Imps,Appnexus Booked Imps")
-        sheetData += Row(style = headerStyle).withCellValues("XFP LineItemName", "XFP Start Date", "XFP End Date", "Appnexus Campaign", "XFP Imps", "XFP Booked Imps", "Appnexus Imps", "Appnexus Booked Imps", "Discrepancy %", "Discrepancy Number", "TB updated on Exchange")
+        val dateFormat = DateTimeFormat.forPattern("yyyy-MM-dd")
+        val timezone = DateTimeZone.forID("America/New_York")
+        val today = new DateTime(timezone)
+        sheetData += Row(style = headerStyle).withCellValues("Agency Prefix", "XFP LineItemName", "XFP Start Date", "XFP End Date", "Appnexus Campaign ID", "Appnexus Campaign", "XFP Imps", "XFP Booked Imps", "Appnexus Imps", "Appnexus Booked Imps", "Lifetime Pacing", "Discrepancy %", "Discrepancy Number", "TB updated on Exchange", "New Daily Cap")
         try {
           result._1 foreach {
             case (xfpCamp, xfpVal) => {
@@ -62,9 +65,13 @@ class GenerateReportActor extends Actor with Logging{
                           toBeUpdatedOnExchange = Some(discrepancyNumber.get + appnxsVal.deliveredImps)
                         } else {
                           discrepancyNumber = Some(discrepancyPerc * xfpVal.bookedImps)
-                          toBeUpdatedOnExchange =Some(discrepancyNumber.get + xfpVal.bookedImps)
+                          toBeUpdatedOnExchange = Some(discrepancyNumber.get + xfpVal.bookedImps)
                         }
-                        sheetData += Row().withCellValues(xfpVal.lineItemName,xfpVal.startDate, xfpVal.endDate,appnxsVal.campaignName,xfpVal.impressionsDelivered,xfpVal.bookedImps,appnxsVal.deliveredImps,appnxsVal.lifeTimeBudgetImps, roundAt(2)(discrepancyPerc*100.0), discrepancyNumber.get.round, toBeUpdatedOnExchange.get.round)
+                        val xfpStartDate = dateFormat.withZone(DateTimeZone.forID("America/New_York")).parseDateTime(xfpVal.startDate)
+                        val xfpEndDate = dateFormat.withZone(DateTimeZone.forID("America/New_York")).parseDateTime(xfpVal.endDate)
+                        val daysInBetween = Days.daysBetween(today.toLocalDate, xfpEndDate.toLocalDate).getDays
+                        val newDailyCap = ((toBeUpdatedOnExchange.get.round - appnxsVal.deliveredImps)/daysInBetween) * 1.03 // 3 % buffer for daily_budget_imps field
+                        sheetData += Row().withCellValues(appnxsVal.agencyPrefix, xfpVal.lineItemName, dateFormat.print(xfpStartDate.toLocalDate.toDate.getTime), dateFormat.print(xfpEndDate.toLocalDate.toDate.getTime), appnxsVal.campaignId, appnxsVal.campaignName, xfpVal.impressionsDelivered, xfpVal.bookedImps,appnxsVal.deliveredImps,appnxsVal.lifeTimeBudgetImps, appnxsVal.lifetimePacing, roundAt(2)(discrepancyPerc*100.0), discrepancyNumber.get.round, toBeUpdatedOnExchange.get.round, newDailyCap.round)
                       }
                       break()
                     }
@@ -73,12 +80,16 @@ class GenerateReportActor extends Actor with Logging{
               }
             }
           }
-          val discrepancyReportSheet = Sheet(name = s"discrepancy_report").withRows(sheetData).withColumns(Column(index = 0, autoSized = true), Column(index = 1, autoSized = true), Column(index = 2, autoSized = true))
-          val filePath = ServicesConfig.appnexusConfig("discrepancy.report.output.file.path")
+          //val discrepancyReportSheet = Sheet(name = s"discrepancy_report").withRows(sheetData).withColumns(Column(index = 0, autoSized = true), Column(index = 1, autoSized = true), Column(index = 2, autoSized = true))
+          val discrepancyReportSheet = Sheet(name = s"discrepancy_report").withRows(sheetData)
+          val sdf = new SimpleDateFormat("yyyyMMdd")
+          val calendar = Calendar.getInstance()
+          val filePath = s"${ServicesConfig.appnexusConfig("discrepancy.report.output.file.path")}-${sdf.format(calendar.getTime)}.xlsx"
           discrepancyReportSheet.saveAsXlsx(filePath)
           log.info("Report data exported...")
         } catch {
-          case ex: Exception => log.error("Exception ", ex)
+          case ex: Exception => log.error("Error when generating the discrepancy report ", ex)
+            throw ex
         }
     }
 
@@ -96,9 +107,8 @@ class GenerateReportActor extends Actor with Logging{
         log.info("Reading appnexus file...")
 
         while (line != None) {
-          //log.info("line = " + line)
           val appnexusData = line.getOrElse("").split("~")
-          appnexusMap += (appnexusData(0) -> AppnexusCampaign(appnexusData(1).toLong, appnexusData(0), appnexusData(2).toLong, appnexusData(3).toLong, appnexusData(4).toLong))
+          appnexusMap += (appnexusData(0) -> AppnexusCampaign(appnexusData(5), appnexusData(1).toLong, appnexusData(0), appnexusData(2).toLong, appnexusData(3).toLong, appnexusData(4).toLong, appnexusData(6).toBoolean))
           line = Option(appnexusReader.readLine())
         }
         appnexusDataPromise.success(TreeMap(appnexusMap.toArray: _*))
@@ -121,7 +131,6 @@ class GenerateReportActor extends Actor with Logging{
         var line: Option[String] = Option(xfpReader.readLine())
         log.info("Reading xfp file...")
         while (line != None) {
-          //log.info("line = " + line)
           val xfpData = line.getOrElse("").split("~")
           xfpMap += (xfpData(0) -> DFPCampaign(xfpData(1).toLong, xfpData(0), xfpData(2).toLong, xfpData(3).toLong, xfpData(4), xfpData(5)))
           line = Option(xfpReader.readLine())

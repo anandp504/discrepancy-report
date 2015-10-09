@@ -3,10 +3,10 @@ package com.collective.models
 /**
  * Created by anand on 31/07/15.
  */
-case class AppnexusCampaign(campaignId: Long, campaignName: String, deliveredImps: Long, lifeTimeBudgetImps: Long, dailyBudgetImps: Long) extends Ordered[AppnexusCampaign] {
+case class AppnexusCampaign(agencyPrefix: String, campaignId: Long, campaignName: String, deliveredImps: Long, lifeTimeBudgetImps: Long, dailyBudgetImps: Long, lifetimePacing: Boolean) extends Ordered[AppnexusCampaign] {
 
   override def toString: String = {
-    s"$campaignName~$campaignId~$deliveredImps~$lifeTimeBudgetImps~$dailyBudgetImps"
+    s"$campaignName~$campaignId~$deliveredImps~$lifeTimeBudgetImps~$dailyBudgetImps~$agencyPrefix~$lifetimePacing"
   }
 
   override def compare(that: AppnexusCampaign): Int = {

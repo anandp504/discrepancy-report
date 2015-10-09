@@ -2,16 +2,13 @@ package com.collective.api
 
 import akka.actor.{ActorSystem, Actor, Props}
 import akka.util.Timeout
-import com.collective.service.GoogleXFPService.XFPLineItems
-import com.collective.service.{DiscrepancyReportDataFetchActor, GenerateReportActor, GoogleXFPService}
+import com.collective.service.{AppnexusReportService, DiscrepancyReportDataFetchActor, GenerateReportActor}
 import spray.routing._
 import com.collective.utils.{Logging, ServicesConfig}
 
-import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import akka.pattern.ask
-import spray.http.MediaTypes._
 
 class CampaignFetcherActor extends Actor with CampaignFetcherService {
 
@@ -30,6 +27,7 @@ trait CampaignFetcherService extends HttpService with Logging {
 
   lazy val generateReportActor = system.actorOf(Props[GenerateReportActor])
   lazy val reportDataFetchActor = system.actorOf(Props[DiscrepancyReportDataFetchActor])
+  lazy val appnexusReportService = system.actorOf(Props[AppnexusReportService].withDispatcher("appnexus-fetch-dispatcher"))
 
   val segmentFetcherRoute = {
 
@@ -37,34 +35,38 @@ trait CampaignFetcherService extends HttpService with Logging {
         complete("root")
       } ~
       path("discrepancy-report") {
-        log.info("calling discrepancy report path....")
         val appnexusCampaignsFile = ServicesConfig.appnexusConfig("appnexus.output.file.path")
         getFromFile(appnexusCampaignsFile)
       } ~
       path("fetch-xfp-data") {
         get {
-          log.info("calling xfp report data fetch path....")
           complete {
             reportDataFetchActor ? "FETCH_XFP_REPORT_DATA"
-            "Discrepancy report data fetch initiated"
+            "XFP Data fetch initiated..."
           }
         }
       } ~
       path("fetch-appnexus-data") {
         get {
-          log.info("calling appnexus report data fetch path....")
           complete {
             reportDataFetchActor ? "FETCH_APPNEXUS_REPORT_DATA"
-            "Discrepancy report data fetch initiated"
+            "Appnexus Data fetch initiated..."
           }
         }
       } ~
       path("generate-discrepancy-report") {
         get {
-          log.info("executing generate report...")
           complete {
             generateReportActor ? "GENERATE_REPORT"
             "Discrepancy report will be generated and emailed"
+          }
+        }
+      } ~
+      path("update-appnexus") {
+        get {
+          complete {
+            reportDataFetchActor ? "UPDATE_APPNEXUS_CAMPAIGNS"
+            "Update appnexus initialized..."
           }
         }
       }
