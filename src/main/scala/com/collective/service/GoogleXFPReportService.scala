@@ -1,6 +1,7 @@
 package com.collective.service
 
 import java.text.SimpleDateFormat
+import java.util.TimeZone
 import java.util.concurrent.Executors
 import akka.actor.Actor
 import akka.pattern.pipe
@@ -8,8 +9,8 @@ import akka.util.Timeout
 import com.collective.models.DFPCampaign
 import com.collective.service.GoogleXFPService.XFPLineItems
 import com.google.api.ads.dfp.axis.factory.DfpServices
-import com.google.api.ads.dfp.axis.utils.v201411.{DateTimes, StatementBuilder}
-import com.google.api.ads.dfp.axis.v201411._
+import com.google.api.ads.dfp.axis.utils.v201602.{DateTimes, StatementBuilder}
+import com.google.api.ads.dfp.axis.v201602._
 import org.joda.time.{Duration, Instant}
 import com.collective.utils.Logging
 
@@ -65,7 +66,8 @@ class GoogleXFPService extends Actor with Logging {
     try {
       val lineItemService: LineItemServiceInterface = dfpServices.get(dfpSession, classOf[LineItemServiceInterface])
       val lineItemStmtBuilder: StatementBuilder = new StatementBuilder()
-      lineItemStmtBuilder.where( s"""endDateTime >= :endDate AND (name like '$agencyNamePrefix%App%' OR name like '$agencyNamePrefix%APP%' OR name like '$agencyNamePrefix%^MOB%' OR name like '$agencyNamePrefix%^TAB%') AND status IN ('DELIVERING', 'READY')""").limit(StatementBuilder.SUGGESTED_PAGE_LIMIT)
+      //lineItemStmtBuilder.where( s"""endDateTime >= :endDate AND (name like '$agencyNamePrefix%App%' OR name like '$agencyNamePrefix%APP%' OR name like '$agencyNamePrefix%^MOB%' OR name like '$agencyNamePrefix%^TAB%') AND status IN ('DELIVERING', 'READY')""").limit(StatementBuilder.SUGGESTED_PAGE_LIMIT)
+      lineItemStmtBuilder.where( s"""endDateTime >= :endDate AND (name like '$agencyNamePrefix%App%' OR name like '$agencyNamePrefix%APP%') AND status IN ('DELIVERING', 'READY')""").limit(StatementBuilder.SUGGESTED_PAGE_LIMIT)
         .withBindVariableValue("endDate", DateTimes.toDateTime(Instant.now().minus(Duration.standardDays(1L)), "America/New_York"))
 
       do {
@@ -91,6 +93,7 @@ class GoogleXFPService extends Actor with Logging {
   def getLineItemDetails(lineItems: Array[LineItem]): List[DFPCampaign] = {
     val xfpLineItems = ListBuffer[DFPCampaign]()
     val sdf = new SimpleDateFormat("yyyy-MM-dd")
+    sdf.setTimeZone(TimeZone.getTimeZone("America/New_York"))
     for(lineItem <- lineItems) {
       val stats: Stats = lineItem.getStats
       if(stats != null) {

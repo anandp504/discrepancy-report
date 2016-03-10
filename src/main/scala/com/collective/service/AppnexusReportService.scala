@@ -6,10 +6,12 @@ import java.util.Calendar
 import akka.actor.Actor
 import akka.pattern.pipe
 import akka.util.Timeout
-import com.collective.models.AppnexusCampaign
+import com.collective.models.{AppnexusCampaignData, AppnexusCampaign}
 import com.collective.service.AppnexusReportService.{UpdateAppnexusCampaign, FetchAppnexusCampaignCount, FetchAppnexusCampaigns}
 import org.apache.poi.ss.usermodel.Row
 import org.apache.poi.xssf.usermodel.{XSSFSheet, XSSFWorkbook}
+import org.joda.time.{DateTime, DateTimeZone}
+import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.json4s.JsonAST.JValue
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
@@ -107,19 +109,20 @@ class AppnexusReportService extends Actor with Logging {
    * Also read if the campaign has lifetime_pacing enabled
    * @return
    */
-  def readComputedDiscrepancyData(): Future[mutable.HashMap[String, List[(Long, String, Long, Long, Boolean)]]] = Future {
+  def readComputedDiscrepancyData(): Future[mutable.HashMap[String, List[AppnexusCampaignData]]] = Future {
     import util.control.Breaks._
     val sdf = new SimpleDateFormat("yyyyMMdd")
     val calendar = Calendar.getInstance()
+    val formatter: DateTimeFormatter = DateTimeFormat.forPattern("yyyy-MM-dd")
     try {
       val filePath = s"${ServicesConfig.appnexusConfig("discrepancy.report.output.file.path")}-${sdf.format(calendar.getTime)}.xlsx"
       val fis: FileInputStream = new FileInputStream(new File(filePath))
       val workbook: XSSFWorkbook = new XSSFWorkbook(fis)
       val sheet: XSSFSheet = workbook.getSheet("discrepancy_report")
       val rowIterator = sheet.iterator()
-      val discrepancyDataByAgency = new mutable.HashMap[String, List[(Long, String, Long, Long, Boolean)]]
+      val discrepancyDataByAgency = new mutable.HashMap[String, List[AppnexusCampaignData]]
       var agencyPrefix: String = ""
-      val agencyData = new ListBuffer[(Long, String, Long, Long, Boolean)]()
+      val agencyData = new ListBuffer[AppnexusCampaignData]()
       while (rowIterator.hasNext) {
         val row: Row = rowIterator.next()
         breakable {
@@ -133,21 +136,25 @@ class AppnexusReportService extends Actor with Logging {
               }
               agencyPrefix = row.getCell(0).toString
             }
+            val startDate = formatter.parseDateTime(row.getCell(2).toString)
+            val endDate = formatter.parseDateTime(row.getCell(3).toString)
             val appnexusCampId = row.getCell(4).getNumericCellValue.toLong
             val appnexusCampName = row.getCell(5).toString
-            val impsToBeUpdated = row.getCell(13).getNumericCellValue.toLong
-            val newDailyCap = row.getCell(14).getNumericCellValue.toLong
-            val lifetimePacing = row.getCell(10).getBooleanCellValue
-            agencyData += ((appnexusCampId, appnexusCampName, impsToBeUpdated, newDailyCap, lifetimePacing))
+            val currentLifeTimeImps = row.getCell(9).getNumericCellValue.toLong
+            val newLifeTimeImps = row.getCell(14).getNumericCellValue.toLong
+            val newDailyCap = row.getCell(15).getNumericCellValue.toLong
+            val lifetimePacing = row.getCell(11).getBooleanCellValue
+            val currentDailyCap = row.getCell(10).getNumericCellValue.toLong
+            agencyData += AppnexusCampaignData(appnexusCampId, appnexusCampName, currentLifeTimeImps, newLifeTimeImps, currentDailyCap, newDailyCap, lifetimePacing, startDate, endDate)
           }
         }
       }
-      /* This is need to add the reuslts of last agency to the HashMap */
+      /* This is needed to add the reuslts of last agency to the HashMap */
       discrepancyDataByAgency += (agencyPrefix.trim -> agencyData.toList)
       discrepancyDataByAgency
     } catch {
       case ex: Exception => log.error("Exception = ", ex)
-      new mutable.HashMap[String, List[(Long, String, Long, Long, Boolean)]]()
+      new mutable.HashMap[String, List[AppnexusCampaignData]]()
     }
   }
 
@@ -156,7 +163,7 @@ class AppnexusReportService extends Actor with Logging {
       val updateCampaignFuture =  updateCampaign(agencyPrefix, campaignId, computedBookedImps, lifetimePacing, computedDailyCap)
       updateCampaignFuture onComplete {
         case Success(response) => log.debug(s"Appnexus Campaign ID $campaignId updated successfully with Lifetime Budget Imps = $computedBookedImps")
-        case Failure(error) => log.error(s"Appnexus Campaign ID $campaignId updated failed")
+        case Failure(error) => log.error(s"Appnexus Campaign ID $campaignId updated failed. Error: " + error)
       }
     } catch {
       case ex: Exception => log.error("Exception = ", ex)

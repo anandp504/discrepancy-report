@@ -25,7 +25,7 @@ object HttpUtils extends Logging {
   implicit val system = ActorSystem("HttpClient")
   system.dispatcher
 
-  implicit val timeout: Timeout = Timeout(1200.second)
+  implicit val timeout: Timeout = Timeout(2400.second)
   implicit val ec = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(50))
 
   val pipeline: Future[SendReceive] = {

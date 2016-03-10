@@ -4,8 +4,9 @@ import java.io.File
 
 import akka.actor.{ActorSystem, Props, Actor}
 import akka.util.Timeout
-import com.collective.models.{DFPCampaign, AppnexusCampaign}
-import com.collective.utils.{AppnexusFileWriterActor, Logging, ServicesConfig}
+import com.collective.models.{AppnexusCampaignData, DFPCampaign, AppnexusCampaign}
+import com.collective.utils.{FileWriterActor, Logging, ServicesConfig}
+import org.joda.time.{DateTime, DateTimeZone}
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.global
 import akka.pattern.ask
@@ -39,7 +40,7 @@ class DiscrepancyReportDataFetchActor extends Actor with Logging {
 
     implicit lazy val jsonFormats = org.json4s.DefaultFormats
     lazy val appnexusReportService = system.actorOf(Props[AppnexusReportService].withDispatcher("appnexus-fetch-dispatcher"), "appnexus-actor")
-    lazy val appnexusFileWriterActor = system.actorOf(Props[AppnexusFileWriterActor])
+    lazy val appnexusFileWriterActor = system.actorOf(Props[FileWriterActor])
     val agenciesPrefix = ServicesConfig.appnexusConfig("reach.agencies.prefix").split(",")
     val processingCount = ServicesConfig.appnexusConfig("campaign.processing.count").toInt
     new File(ServicesConfig.appnexusConfig("appnexus.output.file.path")).delete
@@ -55,7 +56,7 @@ class DiscrepancyReportDataFetchActor extends Actor with Logging {
           appnexusCampaigns.onComplete {
             case Success(campaigns) => {
               log.info("Retrieved " + campaigns.size + " campaigns for " + agencyPrefix)
-              appnexusFileWriterActor ? AppnexusFileWriterActor.AppnexusFileData(campaigns)
+              appnexusFileWriterActor ? FileWriterActor.AppnexusFileData(campaigns)
             }
             case Failure(error) => log.error("Error in Appnexus Future ", error)
           }
@@ -66,7 +67,7 @@ class DiscrepancyReportDataFetchActor extends Actor with Logging {
 
   def fetchXfpData() = Future {
     lazy val googleDfpService = system.actorOf(Props[GoogleXFPService].withDispatcher("appnexus-fetch-dispatcher"), "xfp-actor")
-    lazy val appnexusFileWriterActor = system.actorOf(Props[AppnexusFileWriterActor])
+    lazy val appnexusFileWriterActor = system.actorOf(Props[FileWriterActor])
 
     val agenciesPrefix = ServicesConfig.appnexusConfig("reach.agencies.prefix").split(",")
     new File(ServicesConfig.appnexusConfig("xfp.output.file.path")).delete
@@ -76,7 +77,7 @@ class DiscrepancyReportDataFetchActor extends Actor with Logging {
       xfpLineItems.onComplete {
         case Success(lineItems) =>
           log.info("Retrieved " + lineItems.size + " lineItems for " + agencyPrefix)
-          appnexusFileWriterActor ? AppnexusFileWriterActor.XFPFileData(lineItems)
+          appnexusFileWriterActor ? FileWriterActor.XFPFileData(lineItems)
         case Failure(error) => log.error("Error in XFP Future ", error)
       }
     }
@@ -86,20 +87,34 @@ class DiscrepancyReportDataFetchActor extends Actor with Logging {
     lazy val appnexusReportService = system.actorOf(Props[AppnexusReportService].withDispatcher("appnexus-fetch-dispatcher"), "appnexus-actor")
     val agenciesPrefix = ServicesConfig.appnexusConfig("reach.agencies.prefix").split(",")
     try {
-      val discrepancyDataByAgency = (appnexusReportService ? "READ_DISCREPANCY_DATA").mapTo[mutable.HashMap[String, List[(Long, String, Long, Long, Boolean)]]]
+      val discrepancyDataByAgency = (appnexusReportService ? "READ_DISCREPANCY_DATA").mapTo[mutable.HashMap[String, List[AppnexusCampaignData]]]
+      val timezone = DateTimeZone.forID("America/New_York")
+      val lastDayOfMonth = new DateTime(timezone).dayOfMonth().withMaximumValue()
       discrepancyDataByAgency.map {
         discrepancyData =>
           agenciesPrefix.map {
             agencyPrefix =>
-              val agencyData = discrepancyData.getOrElse(agencyPrefix.trim, List[(Long, String, Long, Long, Boolean)]())
+              val agencyData = discrepancyData.getOrElse(agencyPrefix.trim, List[AppnexusCampaignData]())
               log.info(s"Total number of campaigns to be updated for Agency $agencyPrefix = ${agencyData.size}")
               if (agencyData.size > 0) {
-                for (data: (Long, String, Long, Long, Boolean) <- agencyData) {
-                  val appnexusCampaignId = data._1
-                  val computedBookedImps = data._3
-                  val computedDailyCap = data._4
-                  val lifetimePacing = data._5
-                  if (computedDailyCap > 0) {
+                for (data: AppnexusCampaignData <- agencyData) {
+                  val appnexusCampaignId = data.campaignId
+                  val appnexusCampaignName = data.campaignName
+                  val computedBookedImps = data.newLifeTimeimps
+                  val computedDailyCap = data.newDailyCap
+                  val lifetimePacing = data.lifetimePacing
+                  val currentDailyCap = data.currentDailyCap
+                  val currentLifeTimeImps = data.currentLifeTimeImps
+                  val xfpStartDate = data.startDate
+                  val xfpEndDate = data.endDate
+                  /*
+                  if (currentLifeTimeImps != currentDailyCap && computedDailyCap > 0 && (!agencyPrefix.equalsIgnoreCase("RE TW") ||xfpEndDate.compareTo(lastDayOfMonth) >= 0)) {
+                    log.info(s"Campaign ID: $appnexusCampaignId, Campaign Name: $appnexusCampaignName, end_date: $xfpEndDate, long_flight: ${xfpEndDate.compareTo(lastDayOfMonth) >= 0}")
+                    appnexusReportService ? AppnexusReportService.UpdateAppnexusCampaign(agencyPrefix, appnexusCampaignId, computedBookedImps, computedDailyCap, lifetimePacing)
+                  }
+                  */
+                  if (currentLifeTimeImps != currentDailyCap && computedDailyCap > 0 && (agencyPrefix.equalsIgnoreCase("RE VA") || xfpEndDate.compareTo(lastDayOfMonth) >= 0)) {
+                    log.info(s"Campaign ID: $appnexusCampaignId, Campaign Name: $appnexusCampaignName, end_date: $xfpEndDate, long_flight: ${xfpEndDate.compareTo(lastDayOfMonth) >= 0}")
                     appnexusReportService ? AppnexusReportService.UpdateAppnexusCampaign(agencyPrefix, appnexusCampaignId, computedBookedImps, computedDailyCap, lifetimePacing)
                   }
                 }

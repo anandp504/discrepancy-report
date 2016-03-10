@@ -1,5 +1,7 @@
 package com.collective.models
 
+import org.joda.time.DateTime
+
 /**
  * Created by anand on 31/07/15.
  */
@@ -25,3 +27,9 @@ case class DFPCampaign(lineItemId: Long, lineItemName: String, impressionsDelive
 }
 
 case class DiscrepancyReportOutput(lineItemName: String, xfpDeliveredImps: Long, xfpBookedImps: Long, appnexusCampaign: String, apnxsDeliveredImps: Long, anxsBookedImps: Long)
+
+case class AppnexusCampaignData(campaignId: Long, campaignName: String, currentLifeTimeImps: Long, newLifeTimeimps: Long, currentDailyCap: Long, newDailyCap: Long, lifetimePacing: Boolean, startDate: DateTime, endDate: DateTime) {
+  override def toString: String = {
+    s"$campaignId,$campaignName,$currentLifeTimeImps,$newLifeTimeimps,$currentDailyCap,$newDailyCap,$lifetimePacing,$startDate,$endDate"
+  }
+}

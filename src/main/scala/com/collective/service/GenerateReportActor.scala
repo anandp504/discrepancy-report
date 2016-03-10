@@ -47,7 +47,7 @@ class GenerateReportActor extends Actor with Logging{
         val dateFormat = DateTimeFormat.forPattern("yyyy-MM-dd")
         val timezone = DateTimeZone.forID("America/New_York")
         val today = new DateTime(timezone)
-        sheetData += Row(style = headerStyle).withCellValues("Agency Prefix", "XFP LineItemName", "XFP Start Date", "XFP End Date", "Appnexus Campaign ID", "Appnexus Campaign", "XFP Imps", "XFP Booked Imps", "Appnexus Imps", "Appnexus Booked Imps", "Lifetime Pacing", "Discrepancy %", "Discrepancy Number", "TB updated on Exchange", "New Daily Cap")
+        sheetData += Row(style = headerStyle).withCellValues("Agency Prefix", "XFP LineItemName", "XFP Start Date", "XFP End Date", "Appnexus Campaign ID", "Appnexus Campaign", "XFP Imps", "XFP Booked Imps", "Appnexus Delivered Imps", "Appnexus Booked Imps", "Appnexus Daily Cap", "Lifetime Pacing", "Discrepancy %", "Discrepancy Number", "TB updated on Exchange", "New Daily Cap")
         try {
           result._1 foreach {
             case (xfpCamp, xfpVal) => {
@@ -70,8 +70,11 @@ class GenerateReportActor extends Actor with Logging{
                         val xfpStartDate = dateFormat.withZone(DateTimeZone.forID("America/New_York")).parseDateTime(xfpVal.startDate)
                         val xfpEndDate = dateFormat.withZone(DateTimeZone.forID("America/New_York")).parseDateTime(xfpVal.endDate)
                         val daysInBetween = Days.daysBetween(today.toLocalDate, xfpEndDate.toLocalDate).getDays
-                        val newDailyCap = ((toBeUpdatedOnExchange.get.round - appnxsVal.deliveredImps)/daysInBetween) * 1.03 // 3 % buffer for daily_budget_imps field
-                        sheetData += Row().withCellValues(appnxsVal.agencyPrefix, xfpVal.lineItemName, dateFormat.print(xfpStartDate.toLocalDate.toDate.getTime), dateFormat.print(xfpEndDate.toLocalDate.toDate.getTime), appnxsVal.campaignId, appnxsVal.campaignName, xfpVal.impressionsDelivered, xfpVal.bookedImps,appnxsVal.deliveredImps,appnxsVal.lifeTimeBudgetImps, appnxsVal.lifetimePacing, roundAt(2)(discrepancyPerc*100.0), discrepancyNumber.get.round, toBeUpdatedOnExchange.get.round, newDailyCap.round)
+                        val newDailyCap = if (daysInBetween != 0) ((toBeUpdatedOnExchange.get.round - appnxsVal.deliveredImps)/daysInBetween) * 1.03 else 0L// 3 % buffer for daily_budget_imps field
+                        sheetData += Row().withCellValues(appnxsVal.agencyPrefix, xfpVal.lineItemName, dateFormat.print(xfpStartDate.toLocalDate.toDate.getTime),
+                          dateFormat.print(xfpEndDate.toLocalDate.toDate.getTime), appnxsVal.campaignId, appnxsVal.campaignName, xfpVal.impressionsDelivered,
+                          xfpVal.bookedImps,appnxsVal.deliveredImps,appnxsVal.lifeTimeBudgetImps,appnxsVal.dailyBudgetImps,appnxsVal.lifetimePacing,
+                          roundAt(2)(discrepancyPerc*100.0), discrepancyNumber.get.round, toBeUpdatedOnExchange.get.round, newDailyCap.round)
                       }
                       break()
                     }

@@ -25,7 +25,8 @@ object Build extends Build {
 
   val akkaV = "2.3.6"
   val sprayV = "1.3.2"
-  val adLibsV = "1.35.1"
+  //val adLibsV = "1.35.1"
+  val adLibsV = "2.10.0"
 
   lazy val discrepancyReport = Project("discrepancy-report", file("."))
     .settings(commonSettings: _*)
